@@ -483,12 +483,9 @@ public interface RandomGenerator {
     default void nextBytes(byte[] bytes) {
         int i = 0;
         int len = bytes.length;
-        Unsafe unsafe = Unsafe.getUnsafe();
         for (int words = len >> 3; words--> 0; ) {
             long rnd = nextLong();
-            if (unsafe.isBigEndian())
-                rnd = Long.reverseBytes(rnd);
-            unsafe.putLong(bytes, (long)Unsafe.ARRAY_BYTE_BASE_OFFSET + i, rnd);
+            jdk.internal.util.ByteArrayLittleEndian.setLong(bytes, i, rnd);
             i += Long.BYTES;
         }
         if (i < len)
