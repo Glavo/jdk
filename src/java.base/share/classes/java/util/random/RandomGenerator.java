@@ -486,9 +486,7 @@ public interface RandomGenerator {
         Unsafe unsafe = Unsafe.getUnsafe();
         for (int words = len >> 3; words--> 0; ) {
             long rnd = nextLong();
-            if (unsafe.isBigEndian())
-                rnd = Long.reverseBytes(rnd);
-            unsafe.putLong(bytes, (long)Unsafe.ARRAY_BYTE_BASE_OFFSET + i, rnd);
+            unsafe.putLong(bytes, (long)Unsafe.ARRAY_BYTE_BASE_OFFSET + i, rnd, false);
             i += Long.BYTES;
         }
         if (i < len)
