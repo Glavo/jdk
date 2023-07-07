@@ -539,7 +539,7 @@ public final class Channels {
                                    int minBufferCap)
     {
         Objects.requireNonNull(ch, "ch");
-        return StreamEncoder.forEncoder(ch, enc.reset(), minBufferCap);
+        return StreamEncoder.forChannels(ch, enc.reset(), minBufferCap);
     }
 
     /**
@@ -574,7 +574,7 @@ public final class Channels {
                                    String csName)
     {
         Objects.requireNonNull(csName, "csName");
-        return newWriter(ch, Charset.forName(csName).newEncoder(), -1);
+        return StreamEncoder.forChannels(ch, Charset.forName(csName), -1);
     }
 
     /**
@@ -608,6 +608,6 @@ public final class Channels {
      */
     public static Writer newWriter(WritableByteChannel ch, Charset charset) {
         Objects.requireNonNull(charset, "charset");
-        return newWriter(ch, charset.newEncoder(), -1);
-}
+        return StreamEncoder.forChannels(ch, charset, -1);
+    }
 }

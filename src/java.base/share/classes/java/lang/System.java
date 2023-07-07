@@ -46,9 +46,11 @@ import java.lang.reflect.Modifier;
 import java.net.URI;
 import java.net.URL;
 import java.nio.channels.Channel;
+import java.nio.channels.WritableByteChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
+import java.nio.charset.CodingErrorAction;
 import java.security.AccessControlContext;
 import java.security.AccessController;
 import java.security.CodeSource;
@@ -90,6 +92,7 @@ import jdk.internal.vm.ThreadContainer;
 import jdk.internal.vm.annotation.ForceInline;
 import jdk.internal.vm.annotation.IntrinsicCandidate;
 import jdk.internal.vm.annotation.Stable;
+import sun.nio.cs.StreamEncoder;
 import sun.nio.fs.DefaultFileSystemProvider;
 import sun.reflect.annotation.AnnotationType;
 import sun.nio.ch.Interruptible;
@@ -2493,6 +2496,21 @@ public final class System {
 
             public int decodeASCII(byte[] src, int srcOff, char[] dst, int dstOff, int len) {
                 return String.decodeASCII(src, srcOff, dst, dstOff, len);
+            }
+
+            @Override
+            public StreamEncoder newUTF8StreamEncoder(OutputStream out,
+                                                      Object lock,
+                                                      CodingErrorAction malformedInputAction,
+                                                      byte[] replacement) {
+                return new UTF8StreamEncoder(out, lock, malformedInputAction, replacement);
+            }
+
+            public StreamEncoder newUTF8StreamEncoder(WritableByteChannel ch,
+                                                      CodingErrorAction malformedInputAction,
+                                                      byte[] replacement,
+                                                      int mbc) {
+                return new UTF8StreamEncoder(ch, malformedInputAction, replacement, mbc);
             }
 
             public int encodeASCII(char[] src, int srcOff, byte[] dst, int dstOff, int len) {

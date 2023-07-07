@@ -26,6 +26,8 @@
 package jdk.internal.access;
 
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.Writer;
 import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
@@ -33,8 +35,10 @@ import java.lang.module.ModuleDescriptor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Method;
 import java.net.URI;
+import java.nio.channels.WritableByteChannel;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
+import java.nio.charset.CodingErrorAction;
 import java.security.AccessControlContext;
 import java.security.ProtectionDomain;
 import java.util.List;
@@ -53,6 +57,7 @@ import jdk.internal.vm.Continuation;
 import jdk.internal.vm.ContinuationScope;
 import jdk.internal.vm.StackableScope;
 import jdk.internal.vm.ThreadContainer;
+import sun.nio.cs.StreamEncoder;
 import sun.reflect.annotation.AnnotationType;
 import sun.nio.ch.Interruptible;
 
@@ -374,6 +379,32 @@ public interface JavaLangAccess {
      * @return the number of bytes successfully decoded, at most len
      */
     int decodeASCII(byte[] src, int srcOff, char[] dst, int dstOff, int len);
+
+    /**
+     * TODO: For experimental purposes
+     * @param out TODO
+     * @param lock TODO
+     * @param malformedInputAction TODO
+     * @param replacement TODO
+     * @return TODO
+     */
+    StreamEncoder newUTF8StreamEncoder(OutputStream out,
+                                       Object lock,
+                                       CodingErrorAction malformedInputAction,
+                                       byte[] replacement);
+
+    /**
+     * TODO: For experimental purposes
+     * @param ch TODO
+     * @param malformedInputAction TODO
+     * @param replacement TODO
+     * @param mbc TODO
+     * @return TODO
+     */
+    StreamEncoder newUTF8StreamEncoder(WritableByteChannel ch,
+                                       CodingErrorAction malformedInputAction,
+                                       byte[] replacement,
+                                       int mbc);
 
     /**
      * Returns the initial `System.in` to determine if it is replaced
