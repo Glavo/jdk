@@ -110,7 +110,7 @@ final class UTF8StreamEncoder extends StreamEncoder {
     private byte[] ba;
     private int bp;
 
-    private ByteBuffer bbCache;
+    private ByteBuffer bb;
     private final int maxBufferCapacity;
 
     UTF8StreamEncoder(OutputStream out, Object lock, CodingErrorAction malformedInputAction, byte[] replacement) {
@@ -262,6 +262,7 @@ final class UTF8StreamEncoder extends StreamEncoder {
         growByteBufferIfNeeded(len);
 
         byte[] ba = this.ba;
+        int cap = ba.length;
         long end = offset + ((long) len << 1);
 
         if (haveLeftoverChar) {
@@ -271,7 +272,7 @@ final class UTF8StreamEncoder extends StreamEncoder {
             if (Character.isLowSurrogate(c)) {
                 offset += 2;
 
-                if (ba.length - bp < 4) {
+                if (cap - bp < 4) {
                     implFlushBuffer();
                 }
 
@@ -286,16 +287,38 @@ final class UTF8StreamEncoder extends StreamEncoder {
             }
         }
 
-        // To make encoding characters simpler, we keep ba has more than four bytes remaining,
-        // so that we can always put one character into it at a time.
-        int limit = ba.length - 3;
-
         // Cache bp into a local variable;
         // Before and after calling implFlushBuffer and handleMalformed,
         // its value needs to be resynchronized with bp.
         int count = bp;
-        for (; offset < end; offset += 2) {
-            if (count >= limit) {
+
+        // Handle ASCII-only prefix
+        ascii:
+        while (offset < end) {
+            int rem = cap - count;
+            if (rem == 0) {
+                bp = count;
+                flushBuffer();
+                count = 0;
+                rem = cap;
+            }
+
+            int limit = Math.min(rem, (int) (end - offset) >>> 1);
+            for (int i = 0; i < limit; i++) {
+                char c = UNSAFE.getCharUnaligned(arr, offset);
+                if (c >= 0x80) {
+                    break ascii;
+                }
+
+                ba[count++] = (byte) c;
+                offset += 2;
+            }
+        }
+
+        // To make encoding characters simpler, we keep ba has more than four bytes remaining,
+        // so that we can always put one character into it at a time.
+        for (int limit = cap - 4; offset < end; offset += 2) {
+            if (count > limit) {
                 bp = count;
                 implFlushBuffer();
                 count = 0;
@@ -348,7 +371,7 @@ final class UTF8StreamEncoder extends StreamEncoder {
             if (newCap > cap) {
                 implFlushBuffer();
                 ba = new byte[newCap];
-                bbCache = null;
+                bb = null;
             }
         }
     }
@@ -359,14 +382,14 @@ final class UTF8StreamEncoder extends StreamEncoder {
         if (rem > 0) {
             bp = 0;
             if (ch != null) {
-                if (bbCache == null) {
-                    bbCache = ByteBuffer.wrap(ba, 0, rem);
+                if (bb == null) {
+                    bb = ByteBuffer.wrap(ba, 0, rem);
                 } else {
-                    bbCache.clear();
-                    bbCache.limit(rem);
+                    bb.clear();
+                    bb.limit(rem);
                 }
 
-                int wc = ch.write(bbCache);
+                int wc = ch.write(bb);
                 assert wc == rem : rem;
             } else {
                 out.write(ba, 0, rem);
