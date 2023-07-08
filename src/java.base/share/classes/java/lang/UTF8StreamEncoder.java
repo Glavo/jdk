@@ -249,7 +249,7 @@ final class UTF8StreamEncoder extends StreamEncoder {
                         implFlushBuffer();
                     }
 
-                    bp = putTwoBytesChar(ba, bp, (char) c);
+                    bp = putTwoBytesChar(ba, bp, (char) (c & 0xff));
                     off++;
                 } else {
                     break; // break inner loop
