@@ -574,7 +574,7 @@ public final class Channels {
                                    String csName)
     {
         Objects.requireNonNull(csName, "csName");
-        return StreamEncoder.forChannels(ch, Charset.forName(csName), -1);
+        return newWriter(ch, Charset.forName(csName));
     }
 
     /**
@@ -608,6 +608,7 @@ public final class Channels {
      */
     public static Writer newWriter(WritableByteChannel ch, Charset charset) {
         Objects.requireNonNull(charset, "charset");
+        Objects.requireNonNull(ch, "ch");
         return StreamEncoder.forChannels(ch, charset, -1);
     }
 }

@@ -101,7 +101,7 @@ public abstract class StreamEncoder extends Writer {
                                             int minBufferCap)
     {
         if (charset == StandardCharsets.UTF_8) {
-            return JLA.newUTF8StreamEncoder(ch, CodingErrorAction.REPLACE, DEFAULT_UTF8_REPLACEMENT, minBufferCap);
+            return JLA.newUTF8StreamEncoder(ch, CodingErrorAction.REPORT, null, minBufferCap);
         }
 
         return new StreamEncoderImpl(ch, charset.newEncoder(), minBufferCap);
