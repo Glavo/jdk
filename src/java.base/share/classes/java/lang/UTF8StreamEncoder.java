@@ -150,9 +150,9 @@ final class UTF8StreamEncoder extends StreamEncoder {
     }
 
     private static int putFourBytesChar(byte[] ba, int off, int uc) {
-        ba[off + 0] = (byte) (0xf0 | uc >> 18);
-        ba[off + 1] = (byte) (0x80 | uc >> 12 & 0x3f);
-        ba[off + 2] = (byte) (0x80 | uc >> 6 & 0x3f);
+        ba[off + 0] = (byte) (0xf0 | (uc >> 18));
+        ba[off + 1] = (byte) (0x80 | ((uc >> 12) & 0x3f));
+        ba[off + 2] = (byte) (0x80 | ((uc >> 6) & 0x3f));
         ba[off + 3] = (byte) (0x80 | uc & 0x3f);
         return off + 4;
     }
@@ -166,9 +166,16 @@ final class UTF8StreamEncoder extends StreamEncoder {
             haveLeftoverChar = false;
 
             if (Character.isLowSurrogate(c)) {
-                bp = putFourBytesChar(ba, bp, Character.toCodePoint(leftoverChar, c));
-            } else {
-                handleMalformed();
+                int uc = Character.toCodePoint(leftoverChar, c);
+                if (uc >= 0) {
+                    bp = putFourBytesChar(ba, bp, uc);
+                    return;
+                }
+            }
+
+            handleMalformed();
+            if (!Character.isSurrogate(c)) {
+                putChar(c);
             }
         } else if (c < 0x80) {
             ba[bp++] = (byte) c;
@@ -264,12 +271,18 @@ final class UTF8StreamEncoder extends StreamEncoder {
 
             char c = UNSAFE.getCharUnaligned(arr, offset);
             if (Character.isLowSurrogate(c)) {
+                offset += 2;
                 if (ba.length - bp < 4) {
                     implFlushBuffer();
                 }
 
-                bp = putFourBytesChar(ba, bp, Character.toCodePoint(leftoverChar, c));
-                offset += 2;
+                int uc = Character.toCodePoint(leftoverChar, c);
+                if (uc >= 0) {
+                    bp = putFourBytesChar(ba, bp, uc);
+
+                } else {
+                    handleMalformed();
+                }
             } else {
                 handleMalformed();
             }
@@ -301,9 +314,14 @@ final class UTF8StreamEncoder extends StreamEncoder {
                         // lookahead
                         char low = UNSAFE.getCharUnaligned(arr, offset + 2);
                         if (Character.isLowSurrogate(low)) {
-                            count = putFourBytesChar(ba, count, Character.toCodePoint(c, low));
                             offset += 2;
-                            continue;
+
+                            int uc = Character.toCodePoint(c, low);
+                            if (uc >= 0) {
+                                count = putFourBytesChar(ba, count, uc);
+
+                                continue;
+                            }
                         }
                     } else {
                         // end of input character sequence
