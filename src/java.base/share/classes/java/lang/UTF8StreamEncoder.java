@@ -174,9 +174,7 @@ final class UTF8StreamEncoder extends StreamEncoder {
             }
 
             handleMalformed();
-            if (!Character.isSurrogate(c)) {
-                putChar(c);
-            }
+            putChar(c);
         } else if (c < 0x80) {
             ba[bp++] = (byte) c;
         } else if (c < 0x800) {
@@ -272,6 +270,7 @@ final class UTF8StreamEncoder extends StreamEncoder {
             char c = UNSAFE.getCharUnaligned(arr, offset);
             if (Character.isLowSurrogate(c)) {
                 offset += 2;
+
                 if (ba.length - bp < 4) {
                     implFlushBuffer();
                 }
@@ -279,7 +278,6 @@ final class UTF8StreamEncoder extends StreamEncoder {
                 int uc = Character.toCodePoint(leftoverChar, c);
                 if (uc >= 0) {
                     bp = putFourBytesChar(ba, bp, uc);
-
                 } else {
                     handleMalformed();
                 }
@@ -319,7 +317,6 @@ final class UTF8StreamEncoder extends StreamEncoder {
                             int uc = Character.toCodePoint(c, low);
                             if (uc >= 0) {
                                 count = putFourBytesChar(ba, count, uc);
-
                                 continue;
                             }
                         }
@@ -330,7 +327,6 @@ final class UTF8StreamEncoder extends StreamEncoder {
                         break;
                     }
                 }
-
                 bp = count;
                 handleMalformed();
                 count = bp;
