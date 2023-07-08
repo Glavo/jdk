@@ -257,6 +257,7 @@ final class UTF8StreamEncoder extends StreamEncoder {
         growByteBufferIfNeeded(len);
 
         byte[] ba = this.ba;
+        long end = offset + ((long) len << 1);
 
         if (haveLeftoverChar) {
             haveLeftoverChar = false;
@@ -268,12 +269,11 @@ final class UTF8StreamEncoder extends StreamEncoder {
                 }
 
                 bp = putFourBytesChar(ba, bp, Character.toCodePoint(leftoverChar, c));
+                offset += 2;
             } else {
                 handleMalformed();
             }
         }
-
-        long end = offset + ((long) len << 1);
 
         // To make encoding characters simpler, we keep ba has more than four bytes remaining,
         // so that we can always put one character into it at a time.
