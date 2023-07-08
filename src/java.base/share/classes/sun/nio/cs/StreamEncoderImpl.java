@@ -102,6 +102,9 @@ final class StreamEncoderImpl extends StreamEncoder {
     private final CharsetEncoder encoder;
     private CharBuffer lcb = null;
 
+    private ByteBuffer bb;
+    private final int maxBufferCapacity;
+
     StreamEncoderImpl(OutputStream out, Object lock, Charset cs) {
         this(out, lock,
                 cs.newEncoder()
@@ -112,11 +115,40 @@ final class StreamEncoderImpl extends StreamEncoder {
     StreamEncoderImpl(OutputStream out, Object lock, CharsetEncoder enc) {
         super(out, lock, enc.charset());
         this.encoder = enc;
+
+        this.bb = ByteBuffer.allocate(INITIAL_BYTE_BUFFER_CAPACITY);
+        this.maxBufferCapacity = MAX_BYTE_BUFFER_CAPACITY;
     }
 
     StreamEncoderImpl(WritableByteChannel ch, CharsetEncoder enc, int mbc) {
-        super(ch, enc.charset(), mbc);
+        super(ch, enc.charset());
         this.encoder = enc;
+
+        if (mbc > 0) {
+            this.bb = ByteBuffer.allocate(mbc);
+            this.maxBufferCapacity = mbc;
+        } else {
+            this.bb = ByteBuffer.allocate(INITIAL_BYTE_BUFFER_CAPACITY);
+            this.maxBufferCapacity = MAX_BYTE_BUFFER_CAPACITY;
+        }
+    }
+
+    private void writeBytes() throws IOException {
+        bb.flip();
+        int lim = bb.limit();
+        int pos = bb.position();
+        assert (pos <= lim);
+        int rem = (pos <= lim ? lim - pos : 0);
+
+        if (rem > 0) {
+            if (ch != null) {
+                int wc = ch.write(bb);
+                assert wc == rem : rem;
+            } else {
+                out.write(bb.array(), bb.arrayOffset() + pos, rem);
+            }
+        }
+        bb.clear();
     }
 
     /**
@@ -200,6 +232,12 @@ final class StreamEncoderImpl extends StreamEncoder {
     protected void implWrite(char[] cbuf, int off, int len) throws IOException {
         CharBuffer cb = CharBuffer.wrap(cbuf, off, len);
         implWrite(cb);
+    }
+
+    protected void implFlushBuffer() throws IOException {
+        if (bb.position() > 0) {
+            writeBytes();
+        }
     }
 
     protected void implClose() throws IOException {

@@ -30,10 +30,8 @@ import sun.nio.cs.StreamEncoder;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.Writer;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
-import java.nio.charset.Charset;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.MalformedInputException;
 import java.nio.charset.StandardCharsets;
@@ -106,79 +104,98 @@ final class UTF8StreamEncoder extends StreamEncoder {
 
     // -- Charset-based stream encoder impl --
 
-
     private final CodingErrorAction malformedInputAction;
     private final byte[] replacement;
 
+    private byte[] ba;
+    private int bp;
+
+    private ByteBuffer bbCache;
+    private final int maxBufferCapacity;
+
     UTF8StreamEncoder(OutputStream out, Object lock, CodingErrorAction malformedInputAction, byte[] replacement) {
         super(out, lock, StandardCharsets.UTF_8);
-
         this.malformedInputAction = malformedInputAction;
         this.replacement = replacement;
+
+        this.maxBufferCapacity = MAX_BYTE_BUFFER_CAPACITY;
+        this.ba = new byte[INITIAL_BYTE_BUFFER_CAPACITY];
     }
 
     UTF8StreamEncoder(WritableByteChannel ch, CodingErrorAction malformedInputAction, byte[] replacement, int mbc) {
-        super(ch, StandardCharsets.UTF_8, mbc > 0 ? Math.max(mbc, 4) : -1);
+        super(ch, StandardCharsets.UTF_8);
         this.malformedInputAction = malformedInputAction;
         this.replacement = replacement;
+
+        if (mbc > 0) {
+            this.maxBufferCapacity = Math.max(mbc, 4);
+            this.ba = new byte[maxBufferCapacity];
+        } else {
+            this.maxBufferCapacity = MAX_BYTE_BUFFER_CAPACITY;
+            this.ba = new byte[INITIAL_BYTE_BUFFER_CAPACITY];
+        }
     }
 
-    private static void putTwoBytesChar(ByteBuffer bb, char c) {
-        bb.put((byte) (0xc0 | (c >> 6)));
-        bb.put((byte) (0x80 | (c & 0x3f)));
+    private static int putTwoBytesChar(byte[] ba, int off, char c) {
+        ba[off + 0] = (byte) (0xc0 | (c >> 6));
+        ba[off + 1] = (byte) (0x80 | (c & 0x3f));
+        return off + 2;
     }
 
-    private static void putThreeBytesChar(ByteBuffer bb, char c) {
-        bb.put((byte) (0xe0 | ((c >> 12))));
-        bb.put((byte) (0x80 | ((c >> 6) & 0x3f)));
-        bb.put((byte) (0x80 | (c & 0x3f)));
+    private static int putThreeBytesChar(byte[] ba, int off, char c) {
+        ba[off + 0] = (byte) (0xe0 | c >> 12);
+        ba[off + 1] = (byte) (0x80 | c >> 6 & 0x3f);
+        ba[off + 2] = (byte) (0x80 | c & 0x3f);
+        return off + 3;
     }
 
-    private static void putFourBytesChar(ByteBuffer bb, int uc) {
-        bb.put((byte) (0xf0 | ((uc >> 18))));
-        bb.put((byte) (0x80 | ((uc >> 12) & 0x3f)));
-        bb.put((byte) (0x80 | ((uc >> 6) & 0x3f)));
-        bb.put((byte) (0x80 | (uc & 0x3f)));
+    private static int putFourBytesChar(byte[] ba, int off, int uc) {
+        ba[off + 0] = (byte) (0xf0 | uc >> 18);
+        ba[off + 1] = (byte) (0x80 | uc >> 12 & 0x3f);
+        ba[off + 2] = (byte) (0x80 | uc >> 6 & 0x3f);
+        ba[off + 3] = (byte) (0x80 | uc & 0x3f);
+        return off + 4;
     }
 
     private void putChar(char c) throws IOException {
-        if (bb.remaining() < 4) {
-            writeBytes();
+        if (ba.length - bp < 4) {
+            implFlushBuffer();
         }
 
-        if (this.haveLeftoverChar) {
-            this.haveLeftoverChar = false;
+        if (haveLeftoverChar) {
+            haveLeftoverChar = false;
 
             if (Character.isLowSurrogate(c)) {
-                putFourBytesChar(bb, Character.toCodePoint(this.leftoverChar, c));
+                bp = putFourBytesChar(ba, bp, Character.toCodePoint(leftoverChar, c));
             } else {
                 handleMalformed();
             }
         } else if (c < 0x80) {
-            bb.put((byte) c);
+            ba[bp++] = (byte) c;
         } else if (c < 0x800) {
-            putTwoBytesChar(bb, c);
+            bp = putTwoBytesChar(ba, bp, c);
         } else if (Character.isSurrogate(c)) {
             if (Character.isHighSurrogate(c)) {
-                this.haveLeftoverChar = true;
-                this.leftoverChar = c;
+                haveLeftoverChar = true;
+                leftoverChar = c;
             } else {
                 handleMalformed();
             }
         } else {
-            putThreeBytesChar(bb, c);
+            bp = putThreeBytesChar(ba, bp, c);
         }
     }
 
     private void handleMalformed() throws IOException {
         if (malformedInputAction == CodingErrorAction.REPLACE) {
             for (int i = 0; i < replacement.length; ) {
-                if (!bb.hasRemaining()) {
-                    writeBytes();
+                if (bp == ba.length) {
+                    implFlushBuffer();
                 }
 
-                int n = Math.min(replacement.length - i, bb.remaining());
-                bb.put(replacement, i, n);
+                int n = Math.min(replacement.length - i, ba.length - bp);
+                System.arraycopy(replacement, i, ba, bp, n);
+                bp += n;
                 i += n;
             }
         } else if (malformedInputAction == CodingErrorAction.REPORT) {
@@ -198,34 +215,36 @@ final class UTF8StreamEncoder extends StreamEncoder {
     private void implWriteLatin1(byte[] arr, int off, int len) throws IOException {
         growByteBufferIfNeeded(len);
 
-        if (this.haveLeftoverChar) {
-            this.haveLeftoverChar = false;
+        if (haveLeftoverChar) {
+            haveLeftoverChar = false;
             handleMalformed();
         }
 
+        int cap = ba.length;
         int end = off + len;
         while (off < end) {
             int pos = StringCoding.countPositives(arr, off, end - off);
             while (pos > 0) {
-                if (!bb.hasRemaining()) {
-                    writeBytes();
+                if (bp == cap) {
+                    implFlushBuffer();
                 }
 
-                int n = Math.min(bb.remaining(), pos);
-                bb.put(arr, off, n);
+                int n = Math.min(cap - bp, pos);
+                System.arraycopy(arr, off, ba, bp, n);
 
-                pos -= n;
+                bp += n;
                 off += n;
+                pos -= n;
             }
 
             while (off < end) {
                 byte c = arr[off];
                 if (c < 0) {
-                    if (bb.remaining() < 2) {
-                        writeBytes();
+                    if (cap - bp < 2) {
+                        implFlushBuffer();
                     }
 
-                    putTwoBytesChar(bb, (char) c);
+                    bp = putTwoBytesChar(ba, bp, (char) c);
                     off++;
                 } else {
                     break; // break inner loop
@@ -237,35 +256,119 @@ final class UTF8StreamEncoder extends StreamEncoder {
     private void implWriteUTF16(Object arr, long offset, int len) throws IOException {
         growByteBufferIfNeeded(len);
 
+        byte[] ba = this.ba;
+
+        if (haveLeftoverChar) {
+            haveLeftoverChar = false;
+
+            char c = UNSAFE.getCharUnaligned(arr, offset);
+            if (Character.isLowSurrogate(c)) {
+                if (ba.length - bp < 4) {
+                    implFlushBuffer();
+                }
+
+                bp = putFourBytesChar(ba, bp, Character.toCodePoint(leftoverChar, c));
+            } else {
+                handleMalformed();
+            }
+        }
+
         long end = offset + ((long) len << 1);
 
+        // To make encoding characters simpler, we keep ba has more than four bytes remaining,
+        // so that we can always put one character into it at a time.
+        int limit = ba.length - 3;
+
+        // Cache bp into a local variable;
+        // Before and after calling implFlushBuffer and handleMalformed,
+        // its value needs to be resynchronized with bp.
+        int count = bp;
         for (; offset < end; offset += 2) {
-            putChar(UNSAFE.getCharUnaligned(arr, offset));
+            if (count >= limit) {
+                bp = count;
+                implFlushBuffer();
+                count = 0;
+            }
+
+            char c = UNSAFE.getCharUnaligned(arr, offset);
+            if (c < 0x80) {
+                ba[count++] = (byte) c;
+            } else if (c < 0x800) {
+                count = putTwoBytesChar(ba, count, c);
+            } else if (Character.isSurrogate(c)) {
+                if (Character.isHighSurrogate(c)) {
+                    if (offset < end - 2) {
+                        // lookahead
+                        char low = UNSAFE.getCharUnaligned(arr, offset + 2);
+                        if (Character.isLowSurrogate(low)) {
+                            count = putFourBytesChar(ba, count, Character.toCodePoint(c, low));
+                            offset += 2;
+                            continue;
+                        }
+                    } else {
+                        // end of input character sequence
+                        haveLeftoverChar = true;
+                        leftoverChar = c;
+                        break;
+                    }
+                }
+
+                bp = count;
+                handleMalformed();
+                count = bp;
+            } else {
+                count = putThreeBytesChar(ba, count, c);
+            }
         }
+
+        bp = count;
     }
 
     /**
-     * Grows bb to a capacity to allow len characters be encoded.
+     * Grows ba to a capacity to allow len characters be encoded.
      */
     private void growByteBufferIfNeeded(int len) throws IOException {
-        int cap = bb.capacity();
+        int cap = ba.length;
         if (cap < maxBufferCapacity) {
             int newCap = Math.min(len << 1, maxBufferCapacity);
             if (newCap > cap) {
-                writeBytes();
-                bb = ByteBuffer.allocate(newCap);
+                implFlushBuffer();
+                ba = new byte[newCap];
+                bbCache = null;
             }
         }
     }
 
+    @Override
+    protected void implFlushBuffer() throws IOException {
+        int rem = bp;
+        if (rem > 0) {
+            bp = 0;
+            if (ch != null) {
+                if (bbCache == null) {
+                    bbCache = ByteBuffer.wrap(ba, 0, rem);
+                } else {
+                    bbCache.clear();
+                    bbCache.limit(rem);
+                }
+
+                int wc = ch.write(bbCache);
+                assert wc == rem : rem;
+            } else {
+                out.write(ba, 0, rem);
+            }
+        }
+    }
+
+    @Override
     protected void implClose() throws IOException {
         try {
-            if (this.haveLeftoverChar) {
-                this.haveLeftoverChar = false;
+            if (haveLeftoverChar) {
+                haveLeftoverChar = false;
                 handleMalformed();
             }
 
-            writeBytes();
+            implFlushBuffer();
         } finally {
             if (ch != null) {
                 ch.close();

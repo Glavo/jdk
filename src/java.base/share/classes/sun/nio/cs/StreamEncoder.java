@@ -85,7 +85,8 @@ public abstract class StreamEncoder extends Writer {
     {
         if (enc.charset() == StandardCharsets.UTF_8
             && enc.getClass().getModule() == Object.class.getModule()) {
-            byte[] replacement = enc.malformedInputAction() == CodingErrorAction.REPLACE ? enc.replacement() : null;
+            byte[] replacement = enc.malformedInputAction() == CodingErrorAction.REPLACE
+                    ? enc.replacement() : null;
             return JLA.newUTF8StreamEncoder(out, lock, enc.malformedInputAction(), replacement);
         }
 
@@ -113,7 +114,8 @@ public abstract class StreamEncoder extends Writer {
     {
         if (enc.charset() == StandardCharsets.UTF_8
             && enc.getClass().getModule() == Object.class.getModule()) {
-            byte[] replacement = enc.malformedInputAction() == CodingErrorAction.REPLACE ? enc.replacement() : null;
+            byte[] replacement = enc.malformedInputAction() == CodingErrorAction.REPLACE
+                    ? enc.replacement() : null;
             return JLA.newUTF8StreamEncoder(ch, enc.malformedInputAction(), replacement, minBufferCap);
         }
 
@@ -235,8 +237,6 @@ public abstract class StreamEncoder extends Writer {
     // -- Charset-based stream encoder impl --
 
     private final Charset cs;
-    protected ByteBuffer bb;
-    protected final int maxBufferCapacity;
 
     // Exactly one of these is non-null
     protected final OutputStream out;
@@ -252,49 +252,17 @@ public abstract class StreamEncoder extends Writer {
         this.ch = null;
         this.cs = cs;
 
-        this.bb = ByteBuffer.allocate(INITIAL_BYTE_BUFFER_CAPACITY);
-        this.maxBufferCapacity = MAX_BYTE_BUFFER_CAPACITY;
     }
 
-    protected StreamEncoder(WritableByteChannel ch, Charset cs, int mbc) {
+    protected StreamEncoder(WritableByteChannel ch, Charset cs) {
         this.out = null;
         this.ch = ch;
         this.cs = cs;
-
-        if (mbc > 0) {
-            this.bb = ByteBuffer.allocate(mbc);
-            this.maxBufferCapacity = mbc;
-        } else {
-            this.bb = ByteBuffer.allocate(INITIAL_BYTE_BUFFER_CAPACITY);
-            this.maxBufferCapacity = MAX_BYTE_BUFFER_CAPACITY;
-        }
-    }
-
-    protected final void writeBytes() throws IOException {
-        bb.flip();
-        int lim = bb.limit();
-        int pos = bb.position();
-        assert (pos <= lim);
-        int rem = (pos <= lim ? lim - pos : 0);
-
-        if (rem > 0) {
-            if (ch != null) {
-                int wc = ch.write(bb);
-                assert wc == rem : rem;
-            } else {
-                out.write(bb.array(), bb.arrayOffset() + pos, rem);
-            }
-        }
-        bb.clear();
     }
 
     protected abstract void implWrite(char[] cbuf, int off, int len) throws IOException;
 
-    protected final void implFlushBuffer() throws IOException {
-        if (bb.position() > 0) {
-            writeBytes();
-        }
-    }
+    protected abstract void implFlushBuffer() throws IOException;
 
     protected final void implFlush() throws IOException {
         implFlushBuffer();
