@@ -261,20 +261,24 @@ final class UTF8StreamEncoder extends StreamEncoder {
             pos -= n;
         }
 
-        // latin1 loop
-        int limit = cap - 2;
         while (off < end) {
-            if (count > limit) {
-                bp = count;
-                implFlushBuffer();
-                count = 0;
-            }
-
             byte c = arr[off];
             if (c < 0) {
+                if (cap - count < 2) {
+                    bp = count;
+                    implFlushBuffer();
+                    count = 0;
+                }
+
                 count = putTwoBytesChar(ba, count, (char) (c & 0xff));
                 off++;
             } else {
+                if (count >= cap) {
+                    bp = count;
+                    implFlushBuffer();
+                    count = 0;
+                }
+
                 arr[off++] = c;
             }
         }
