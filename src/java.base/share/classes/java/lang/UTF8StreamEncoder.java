@@ -238,7 +238,6 @@ final class UTF8StreamEncoder extends StreamEncoder {
 
         int cap = ba.length;
         int end = off + len;
-        int limit = cap - 2;
 
         // Cache bp into a local variable;
         // Before and after calling implFlushBuffer and handleMalformed,
@@ -264,18 +263,20 @@ final class UTF8StreamEncoder extends StreamEncoder {
             }
 
             // latin1 loop
+            int limit = cap - 2;
             while (off < end) {
+                if (count > limit) {
+                    bp = count;
+                    implFlushBuffer();
+                    count = 0;
+                }
+
                 byte c = arr[off];
                 if (c < 0) {
-                    if (count > limit) {
-                        bp = count;
-                        implFlushBuffer();
-                        count = 0;
-                    }
-
                     count = putTwoBytesChar(ba, count, (char) (c & 0xff));
                     off++;
                 } else {
+                    arr[off++] = c;
                     break; // break latin1 loop
                 }
             }
