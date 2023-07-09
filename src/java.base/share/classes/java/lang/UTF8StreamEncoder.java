@@ -40,6 +40,7 @@ import java.util.Objects;
 final class UTF8StreamEncoder extends StreamEncoder {
 
     private static final Unsafe UNSAFE = Unsafe.getUnsafe();
+    private static final boolean BIG_ENDIAN = UNSAFE.isBigEndian();
 
     // -- Public methods corresponding to those in OutputStreamWriter --
 
@@ -137,8 +138,13 @@ final class UTF8StreamEncoder extends StreamEncoder {
     }
 
     private static int putTwoBytesChar(byte[] ba, int off, char c) {
-        ba[off + 0] = (byte) (0xc0 | (c >> 6));
-        ba[off + 1] = (byte) (0x80 | (c & 0x3f));
+        int b0 = 0xc0 | (c >> 6);
+        int b1 = 0x80 | (c & 0x3f);
+
+        UNSAFE.putShortUnaligned(ba, (long) Unsafe.ARRAY_BYTE_BASE_OFFSET + off,
+                (short) (BIG_ENDIAN
+                        ? (b0 << 8) | b1
+                        : b0 | (b1 << 8)));
         return off + 2;
     }
 
@@ -150,10 +156,15 @@ final class UTF8StreamEncoder extends StreamEncoder {
     }
 
     private static int putFourBytesChar(byte[] ba, int off, int uc) {
-        ba[off + 0] = (byte) (0xf0 | (uc >> 18));
-        ba[off + 1] = (byte) (0x80 | ((uc >> 12) & 0x3f));
-        ba[off + 2] = (byte) (0x80 | ((uc >> 6) & 0x3f));
-        ba[off + 3] = (byte) (0x80 | uc & 0x3f);
+        int b0 = 0xf0 | (uc >> 18);
+        int b1 = 0x80 | ((uc >> 12) & 0x3f);
+        int b2 = 0x80 | ((uc >> 6) & 0x3f);
+        int b3 = 0x80 | uc & 0x3f;
+
+        UNSAFE.putIntUnaligned(ba, (long) Unsafe.ARRAY_BYTE_BASE_OFFSET + off, BIG_ENDIAN
+                ? (b0 << 24) | (b1 << 16) | (b2 << 8) | b3
+                : b0 | (b1 << 8) | (b2 << 16) | (b3 << 24));
+
         return off + 4;
     }
 
