@@ -261,37 +261,21 @@ final class UTF8StreamEncoder extends StreamEncoder {
             pos -= n;
         }
 
-        if (off < end) {
-            // fast loop
-            for (int limit = Integer.min(off + ((cap - count) >>> 1), end); off < limit; off++) {
+        while (off < end) {
+            int rem = cap - count;
+            if (rem < 4) {
+                bp = count;
+                implFlushBuffer();
+                count = 0;
+                rem = cap;
+            }
+
+            for (int limit = Integer.min(off + (rem >>> 1), end); off < limit; off++) {
                 byte c = arr[off];
                 if (c < 0) {
                     count = putTwoBytesChar(ba, count, (char) (c & 0xff));
                 } else {
                     arr[off] = c;
-                }
-            }
-
-            // slow loop
-            while (off < end) {
-                byte c = arr[off];
-                if (c < 0) {
-                    if (cap - count < 2) {
-                        bp = count;
-                        implFlushBuffer();
-                        count = 0;
-                    }
-
-                    count = putTwoBytesChar(ba, count, (char) (c & 0xff));
-                    off++;
-                } else {
-                    if (count >= cap) {
-                        bp = count;
-                        implFlushBuffer();
-                        count = 0;
-                    }
-
-                    arr[off++] = c;
                 }
             }
         }
