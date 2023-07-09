@@ -238,35 +238,50 @@ final class UTF8StreamEncoder extends StreamEncoder {
 
         int cap = ba.length;
         int end = off + len;
+        int limit = cap - 2;
+
+        // Cache bp into a local variable;
+        // Before and after calling implFlushBuffer and handleMalformed,
+        // its value needs to be resynchronized with bp.
+        int count = bp;
+
         while (off < end) {
+            // ascii loop
             int pos = StringCoding.countPositives(arr, off, end - off);
             while (pos > 0) {
-                if (bp == cap) {
+                if (count == cap) {
+                    bp = count;
                     implFlushBuffer();
+                    count = 0;
                 }
 
-                int n = Math.min(cap - bp, pos);
-                System.arraycopy(arr, off, ba, bp, n);
+                int n = Math.min(cap - count, pos);
+                System.arraycopy(arr, off, ba, count, n);
 
-                bp += n;
+                count += n;
                 off += n;
                 pos -= n;
             }
 
+            // latin1 loop
             while (off < end) {
                 byte c = arr[off];
                 if (c < 0) {
-                    if (cap - bp < 2) {
+                    if (count > limit) {
+                        bp = count;
                         implFlushBuffer();
+                        count = 0;
                     }
 
-                    bp = putTwoBytesChar(ba, bp, (char) (c & 0xff));
+                    count = putTwoBytesChar(ba, count, (char) (c & 0xff));
                     off++;
                 } else {
-                    break; // break inner loop
+                    break; // break latin1 loop
                 }
             }
         }
+
+        bp = count;
     }
 
     private void implWriteUTF16(Object arr, long offset, int len) throws IOException {
