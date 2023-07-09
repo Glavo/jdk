@@ -275,7 +275,7 @@ final class UTF8StreamEncoder extends StreamEncoder {
                 if (c < 0) {
                     count = putTwoBytesChar(ba, count, (char) (c & 0xff));
                 } else {
-                    arr[off] = c;
+                    ba[off] = c;
                 }
             }
         }
