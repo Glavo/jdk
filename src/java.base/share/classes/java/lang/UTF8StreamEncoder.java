@@ -244,41 +244,38 @@ final class UTF8StreamEncoder extends StreamEncoder {
         // its value needs to be resynchronized with bp.
         int count = bp;
 
-        while (off < end) {
-            // ascii loop
-            int pos = StringCoding.countPositives(arr, off, end - off);
-            while (pos > 0) {
-                if (count == cap) {
-                    bp = count;
-                    implFlushBuffer();
-                    count = 0;
-                }
-
-                int n = Math.min(cap - count, pos);
-                System.arraycopy(arr, off, ba, count, n);
-
-                count += n;
-                off += n;
-                pos -= n;
+        // Handle ASCII-only prefix
+        int pos = StringCoding.countPositives(arr, off, end - off);
+        while (pos > 0) {
+            if (count == cap) {
+                bp = count;
+                implFlushBuffer();
+                count = 0;
             }
 
-            // latin1 loop
-            int limit = cap - 2;
-            while (off < end) {
-                if (count > limit) {
-                    bp = count;
-                    implFlushBuffer();
-                    count = 0;
-                }
+            int n = Math.min(cap - count, pos);
+            System.arraycopy(arr, off, ba, count, n);
 
-                byte c = arr[off];
-                if (c < 0) {
-                    count = putTwoBytesChar(ba, count, (char) (c & 0xff));
-                    off++;
-                } else {
-                    arr[off++] = c;
-                    break; // break latin1 loop
-                }
+            count += n;
+            off += n;
+            pos -= n;
+        }
+
+        // latin1 loop
+        int limit = cap - 2;
+        while (off < end) {
+            if (count > limit) {
+                bp = count;
+                implFlushBuffer();
+                count = 0;
+            }
+
+            byte c = arr[off];
+            if (c < 0) {
+                count = putTwoBytesChar(ba, count, (char) (c & 0xff));
+                off++;
+            } else {
+                arr[off++] = c;
             }
         }
 
